@@ -13,6 +13,7 @@ class Category:
 @dataclass
 class Group:
     name: str
+    link: str
     holder_id: str
     is_private: bool
     categories: list[Category]
