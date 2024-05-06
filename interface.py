@@ -11,10 +11,17 @@ class Category:
 
 
 @dataclass
+class User:
+    id: int  # TODO: message.from_user.id
+    nick: str  # TODO: message.from_user.username
+    name: None | str = None  # TODO: message.from_user.full_name
+
+
+@dataclass
 class Group:
     name: str
     link: str
-    holder_id: str
+    holder: User
     is_private: bool
     categories: list[Category]
 

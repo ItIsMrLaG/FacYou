@@ -14,11 +14,15 @@ fasteners==0.19
 frozenlist==1.4.1
 humanfriendly==10.0
 idna==3.6
+Jinja2==3.1.4
 magic-filter==1.0.12
+MarkupSafe==2.1.5
 multidict==6.0.5
 property-manager==3.0
 pydantic==2.5.3
+pydantic-settings==2.2.1
 pydantic_core==2.14.6
+python-dotenv==1.0.1
 pytz==2024.1
 returns==0.22.0
 router==0.1
