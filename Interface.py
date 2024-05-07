@@ -6,8 +6,8 @@ from returns.result import Result
 
 @dataclass
 class Category:
+    id: int
     name: str
-    id: str
 
 
 @dataclass
@@ -27,8 +27,6 @@ class Group:
 
 
 class DataService(Protocol):
-
-    # TODO: search by name
 
     @abc.abstractmethod
     def get_categories(self) -> list[Category]:
