@@ -14,7 +14,7 @@ class Category:
 class User:
     id: int  # TODO: message.from_user.id
     nick: str  # TODO: message.from_user.username
-    name: None | str = None  # TODO: message.from_user.full_name
+    #name: None | str = None  # TODO: message.from_user.full_name
 
 
 @dataclass
@@ -22,6 +22,7 @@ class Group:
     name: str
     link: str
     is_private: bool
+    holder: User
     category: Category
 
 

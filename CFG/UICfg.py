@@ -7,5 +7,6 @@ commands = {
     "start_cmd": ("start", "Начать?"),
     "support_cmd": ("contacts", "Связь с поддержкой"),
     "admin_cmd": ("admin", "Гайд для админа"),
+    "validate_cmd": ("validate", "Провадилировать группы"),
 }
 

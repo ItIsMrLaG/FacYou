@@ -5,9 +5,17 @@ from Interface import Category as CategoryView, User as UserView, Group as Group
 from .models import Category, User, Group
 from .map_extensions import *
 
+admin_ids = {1236245459} # TODO вынести в отдельное место
+
 class DatabaseManager:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def get_user(self, user_id: int) -> UserView:
+        session = self.session
+        res = await session.execute(select(User).filter_by(id=user_id))
+
+        return res.scalars().first()
 
     async def get_categories(self):
         session = self.session
@@ -34,6 +42,20 @@ class DatabaseManager:
         session = self.session
         session.add(Category(name = category_name))
         await session.commit()
+
+    async def get_unvalidated_groups(self) -> list[GroupView]:
+        session = self.session
+        res = await session.execute(select(Group).filter_by(is_validated = False))
+        groups = res.scalars().all()
+
+        group_views = []
+        for g in groups:
+            cat = await self.get_category(g.category_id)
+            user = await self.get_user(g.holder_id)
+            if isinstance(cat, Success):
+                group_views.append(group_map(g, cat.unwrap(), user))
+
+        return group_views
     
     async def get_user_groups(self, user_id: int) -> Result[list[list[Group]], str]:
         session = self.session
@@ -49,12 +71,14 @@ class DatabaseManager:
         for g in groups:
             if g.is_validated:
                 category = await self.get_category(g.category_id)
+                user = await self.get_user(g.holder_id)
                 if isinstance(category, Success):
-                    validated_groups.append(group_map(g, category.unwrap()))
+                    validated_groups.append(group_map(g, category.unwrap(), user))
             elif not g.is_validated:
                 category = await self.get_category(g.category_id)
+                user = await self.get_user(g.holder_id)
                 if isinstance(category, Success):
-                    unvalidated_groups.append(group_map(g, category.unwrap()))
+                    unvalidated_groups.append(group_map(g, category.unwrap(), user))
 
         return Success([validated_groups, unvalidated_groups])
     
@@ -66,8 +90,9 @@ class DatabaseManager:
         groups_view = []
         for g in groups:
             cat = await self.get_category(g.category_id)
+            user = await self.get_user(g.holder_id)
             if isinstance(cat, Success):
-                groups_view.append(group_map(g, cat.unwrap()))
+                groups_view.append(group_map(g, cat.unwrap(), user))
 
         return groups_view
     
@@ -87,7 +112,7 @@ class DatabaseManager:
         user = result.scalars().first()
 
         if not user:
-            user = User(id = group_model.holder.id,)
+            user = User(id = group_model.holder.id, nick=group_model.holder.nick)
             session.add(user)
             await session.commit()
 
@@ -112,7 +137,7 @@ class DatabaseManager:
         session = self.session
         result = await session.execute(select(Group).filter_by(name=group_name))
         group = result.scalars().first()
-        if group and group.holder_id == user_id:
+        if group and (group.holder_id == user_id or user_id in admin_ids):
             await session.delete(group)
             await session.commit()
             return Success("Группа успешно удалена")
@@ -121,13 +146,25 @@ class DatabaseManager:
         else:
             return Failure("Данной группы не существует")
         
+    # TODO: ниже везде добавить на проверку user_id
+
+    async def update_group_set_validate_status(self, group_id: str) -> Result[bool, str]:
+        session = self.session
+        res = await session.execute(select(Group).filter_by(id = group_id))
+        group = res.scalars().first()
+        if not group:
+            return Failure("Такой группы не существует.")
+        await session.execute(update(Group).where(Group.id == group_id).values(is_validated=True))
+        await session.commit()
+        return Success(True)
+        
     async def update_group_title(self, group_id: int, title: str) -> Result[bool, str]:
         session = self.session
         res = await session.execute(select(Group).filter_by(id = group_id))
         group = res.scalars().first()
         if not group:
             return Failure("Такой группы не существует.")
-        await session.execute(update(Group).where(id == group_id).values(name=title))
+        await session.execute(update(Group).where(Group.id == group_id).values(name=title))
         await session.commit()
         return Success(True)
 
@@ -138,6 +175,7 @@ class DatabaseManager:
         if not group:
             return Failure("Такой группы не существует")
         await session.execute(update(Group).where(id == group_id).values(is_private=not group.is_private))
+        await session.commit()
         return Success(True)
             
          

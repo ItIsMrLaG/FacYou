@@ -55,7 +55,9 @@ async def process_categories(callback_query: types.CallbackQuery, state: FSMCont
     category = await db.get_category(cat_id)
 
     if isinstance(category, Failure):
-        await callback_query.answer(category.unwrap())
+        await callback_query.answer(category._inner_value)
+        state.clear()
+        return
     
     cat_name = category.unwrap().name
     
@@ -84,15 +86,17 @@ async def process_link(message: types.Message, state: FSMContext, db: DatabaseMa
         Group(
             name=name, 
             link=link,
-            holder=User(id=message.from_user.id, nick=message.from_user.username,name=message.from_user.full_name),
+            holder=User(id=message.from_user.id, nick=message.from_user.username),
             is_private=is_private,
             category=category
             ))
     
     if (isinstance(res, Failure)):
-        message.answer(res.unwrap())
+        await message.answer(res._inner_value)
+        state.clear()
+        return
     else:
-        message.answer("Группа отправлена на проверку администратору")
+        await message.answer("Группа отправлена на проверку администратору")
 
     await state.clear()
 
@@ -107,11 +111,13 @@ class Update(StatesGroup):
 async def update_cmd(message: types.Message, state: FSMContext, db: DatabaseManager):
     res = await db.get_user_groups(message.from_user.id)
     if isinstance(res, Failure):
-        message.answer(res.unwrap())
+        message.answer(res._inner_value)
+        state.clear()
+        return
     else:
         [validated, unvalidated] = res.unwrap()
         await message.answer(f"{render_list_of_groups([g.name for g in validated], [g.name for g in unvalidated])}")  
-        await message.answer("Выберите группу для редактирования:")
+        await message.answer("Введите название группы для редактирования:")
     await state.set_state(Update.choosing_group)
 
 @router.message(Update.choosing_group)
@@ -121,9 +127,11 @@ async def process_choosing_group(message: types.Message, state: FSMContext, db: 
 
     group_id = await db.get_group_id_by_name(group_name)
     if isinstance(group_id, Failure):
-        await message.answer(text = group_id.unwrap())
+        await message.answer(text = group_id._inner_value)
+        state.clear()
+        return
     
-    state.set_data(group_id=group_id.unwrap())
+    await state.update_data(group_id = group_id.unwrap())
 
     title = InlineKeyboardButton(text="Название", callback_data="update:title")
     privacy = InlineKeyboardButton(text="Приватность", callback_data="update:privacy")
@@ -149,7 +157,13 @@ async def update_title(message: types.Message, state: FSMContext, db: DatabaseMa
     title = data["title"]
     group_id = data["group_id"]
 
-    await db.update_group_title(group_id, title)
+    res = await db.update_group_title(group_id, title)
+    if isinstance(res, Failure):
+        await message.answer(res._inner_value)
+        state.clear()
+    else:
+        await message.answer("Группа успешно обновлена")
+
     await state.clear()
 
 @router.message(Update.update_privacy)
@@ -157,7 +171,12 @@ async def update_privacy(message: types.Message, state: FSMContext, db: Database
     data = await state.get_data()
     group_id = data["group_id"]
 
-    await db.update_group_privacy(group_id)
+    res = await db.update_group_privacy(group_id)
+    if isinstance(res, Failure):
+        await message.answer(res._inner_value)
+        state.clear()
+    else:
+        await message.answer("Группа успешно обновлена")
     await state.clear()
 
 class Delete(StatesGroup):
@@ -168,7 +187,9 @@ async def delete_cmd(message: types.Message, db: DatabaseManager, state: FSMCont
     res = await db.get_user_groups(message.from_user.id)
 
     if isinstance(res, Failure):
-        await message.answer(res.unwrap())
+        await message.answer(res._inner_value)
+        state.clear()
+        return
     else:
         [validated, unvalidated] = res.unwrap()
         await message.answer(f"{render_list_of_groups([g.name for g in validated], [g.name for g in unvalidated])}")

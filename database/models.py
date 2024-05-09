@@ -26,6 +26,7 @@ class Group(Base):
 class User(Base):
     __tablename__ = 'user'
     id = Column(Integer, primary_key=True, autoincrement=False)
+    nick = Column(String)
     groups = relationship('Group', order_by=Group.id, back_populates='holder')
 
 categories = ["⚽️ Спорт", "📕 Учеба", "🎭 Клубы", "🚨 Объявления", "➖ Другое"]
