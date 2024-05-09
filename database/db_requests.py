@@ -1,5 +1,5 @@
 from returns.result import Result, Success, Failure
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from Interface import Category as CategoryView, User as UserView, Group as GroupView
 from .models import Category, User, Group
@@ -60,7 +60,7 @@ class DatabaseManager:
     
     async def get_validated_groups_by_category(self, cat_id) -> list[GroupView]:
         session = self.session
-        result = await session.execute(select(Group).filter_by(category_id = cat_id))
+        result = await session.execute(select(Group).filter_by(category_id = cat_id, is_validated = True))
         groups = result.scalars().all()
 
         groups_view = []
@@ -70,6 +70,16 @@ class DatabaseManager:
                 groups_view.append(group_map(g, cat.unwrap()))
 
         return groups_view
+    
+    async def get_group_id_by_name(self, name) -> Result[int, str]:
+        session = self.session
+        result = await session.execute(select(Group).filter_by(name=name))
+        group = result.scalars().first()
+
+        if not group:
+            return Failure("Такой группы не существует")
+        
+        return Success(group.id)
     
     async def add_unvalidated_group(self, group_model : GroupView) -> Result[bool, str]:
         session = self.session
@@ -111,5 +121,23 @@ class DatabaseManager:
         else:
             return Failure("Данной группы не существует")
         
+    async def update_group_title(self, group_id: int, title: str) -> Result[bool, str]:
+        session = self.session
+        res = await session.execute(select(Group).filter_by(id = group_id))
+        group = res.scalars().first()
+        if not group:
+            return Failure("Такой группы не существует.")
+        await session.execute(update(Group).where(id == group_id).values(name=title))
+        await session.commit()
+        return Success(True)
+
+    async def update_group_privacy(self, group_id: int) -> Result[bool, str]:
+        session = self.session
+        res = await session.execute(select(Group).filter_by(id = group_id))
+        group = res.scalars().first()
+        if not group:
+            return Failure("Такой группы не существует")
+        await session.execute(update(Group).where(id == group_id).values(is_private=not group.is_private))
+        return Success(True)
             
          

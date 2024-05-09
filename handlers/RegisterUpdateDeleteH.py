@@ -96,11 +96,69 @@ async def process_link(message: types.Message, state: FSMContext, db: DatabaseMa
 
     await state.clear()
 
+class Update(StatesGroup):
+    choosing_group = State()
+    choosing_parameter = State()
+    update_title = State()
+    update_privacy = State()
+
 
 @router.message(F.text, Command(cmds["update_cmd"][0]))
-async def update_cmd(message: types.Message, db: DatabaseManager):
-    pass  # TODO
+async def update_cmd(message: types.Message, state: FSMContext, db: DatabaseManager):
+    res = await db.get_user_groups(message.from_user.id)
+    if isinstance(res, Failure):
+        message.answer(res.unwrap())
+    else:
+        [validated, unvalidated] = res.unwrap()
+        await message.answer(f"{render_list_of_groups([g.name for g in validated], [g.name for g in unvalidated])}")  
+        await message.answer("Выберите группу для редактирования:")
+    await state.set_state(Update.choosing_group)
 
+@router.message(Update.choosing_group)
+async def process_choosing_group(message: types.Message, state: FSMContext, db: DatabaseManager):
+    await state.update_data(group_name = message.text)
+    group_name = (await state.get_data())["group_name"]
+
+    group_id = await db.get_group_id_by_name(group_name)
+    if isinstance(group_id, Failure):
+        await message.answer(text = group_id.unwrap())
+    
+    state.set_data(group_id=group_id.unwrap())
+
+    title = InlineKeyboardButton(text="Название", callback_data="update:title")
+    privacy = InlineKeyboardButton(text="Приватность", callback_data="update:privacy")
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[title, privacy]])
+    await message.answer("Выберите параметр для редактирования", reply_markup=keyboard)
+    await state.set_state(Update.choosing_parameter)
+
+@router.callback_query(Update.choosing_parameter)
+async def process_choosing(callback_query: types.CallbackQuery, state: FSMContext):
+    type = callback_query.data.split("update:")[1]
+    if type == "title":
+        await callback_query.message.answer("Введите новое название")
+        await state.set_state(Update.update_title)
+    elif type == "privacy":
+        await state.set_state(Update.update_privacy)
+    
+
+@router.message(Update.update_title)
+async def update_title(message: types.Message, state: FSMContext, db: DatabaseManager):
+    await state.update_data(title=message.text)
+
+    data = await state.get_data()
+    title = data["title"]
+    group_id = data["group_id"]
+
+    await db.update_group_title(group_id, title)
+    await state.clear()
+
+@router.message(Update.update_privacy)
+async def update_privacy(message: types.Message, state: FSMContext, db: DatabaseManager):
+    data = await state.get_data()
+    group_id = data["group_id"]
+
+    await db.update_group_privacy(group_id)
+    await state.clear()
 
 class Delete(StatesGroup):
     enter_name = State()
@@ -114,7 +172,7 @@ async def delete_cmd(message: types.Message, db: DatabaseManager, state: FSMCont
     else:
         [validated, unvalidated] = res.unwrap()
         await message.answer(f"{render_list_of_groups([g.name for g in validated], [g.name for g in unvalidated])}")
-        await message.answer("Введите название группы для удаления:")
+        await message.answer("Выберите группу для удаления:")
         await state.set_state(Delete.enter_name)
 
 @router.message(Delete.enter_name)
