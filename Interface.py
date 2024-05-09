@@ -21,9 +21,8 @@ class User:
 class Group:
     name: str
     link: str
-    holder: User
     is_private: bool
-    categories: list[Category]
+    category: Category
 
 
 class DataService(Protocol):

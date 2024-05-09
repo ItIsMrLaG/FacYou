@@ -7,9 +7,16 @@ from CFG.UICfg import commands as cmds
 from handlers import StaticH, AdminH, RegisterUpdateDeleteH, SearchH
 
 from aiogram import Bot, Dispatcher, types
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from db_middleware import DatabaseMiddleware
+from database.models import async_main
 
 
 async def main():
+    engine = create_async_engine(cfg.db_url, echo=True)
+    await async_main(engine)
+    session = async_sessionmaker(engine, expire_on_commit=False)
+
     BOT = Bot(cfg.token.get_secret_value())
     dp = Dispatcher()
 
@@ -19,6 +26,7 @@ async def main():
         AdminH.router,
         StaticH.router,
     )
+    dp.update.middleware(DatabaseMiddleware(session=session))
 
     bot_commands = [
         types.BotCommand(command=name, description=descr) for (name, descr) in cmds.values()
