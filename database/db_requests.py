@@ -1,8 +1,6 @@
 from returns.result import Result, Success, Failure
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
-from Interface import Category as CategoryView, User as UserView, Group as GroupView
-from .models import Category, User, Group
 from .map_extensions import *
 from CFG.ConfigHandler import config as cfg
 
@@ -96,7 +94,7 @@ class DatabaseManager:
 
         return groups_view
 
-    async def get_group_id_by_name(self, name) -> Result[int, str]:
+    async def get_group_by_name(self, name) -> Result[Group, str]:
         session = self.session
         result = await session.execute(select(Group).filter_by(name=name))
         group = result.scalars().first()
@@ -104,7 +102,14 @@ class DatabaseManager:
         if not group:
             return Failure("Такой группы не существует")
 
-        return Success(group.id)
+        return Success(group)
+
+    async def get_group_id_by_name(self, name) -> Result[int, str]:
+        group = await self.get_group_by_name(name)
+        if isinstance(group, Success):
+            return Success(group.unwrap().id)
+
+        return Failure(group._inner_value)
 
     async def add_unvalidated_group(self, group_model: GroupView) -> Result[bool, str]:
         session = self.session
@@ -168,12 +173,12 @@ class DatabaseManager:
         await session.commit()
         return Success(True)
 
-    async def update_group_privacy(self, group_id: int) -> Result[bool, str]:
+    async def update_group_privacy(self, group_id: int, access: bool) -> Result[bool, str]:
         session = self.session
         res = await session.execute(select(Group).filter_by(id=group_id))
         group = res.scalars().first()
         if not group:
             return Failure("Такой группы не существует")
-        await session.execute(update(Group).where(id == group_id).values(is_private=not group.is_private))
+        await session.execute(update(Group).where(Group.id == group_id).values(is_private=not group.is_private))
         await session.commit()
         return Success(True)

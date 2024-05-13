@@ -29,7 +29,7 @@ async def search_cmd(message: types.Message, state: FSMContext, db: DatabaseMana
     cats_dict: dict[str: Category] = dict([(cat.id, cat.name) for cat in cats])
     print(cats_dict)
 
-    cat_buttons = render_categories_buttons(cats)
+    cat_buttons = render_categories_buttons(cats, "category")
     submit_button = [InlineKeyboardButton(text=Search.SUBMIT_NAME, callback_data=f"category:{Search.SUBMIT_KEY}")]
     cat_buttons.append(submit_button)
 

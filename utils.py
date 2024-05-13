@@ -22,22 +22,22 @@ def render_categories_list(categories: list[str]) -> str:
 def render_list_of_groups(validated: list[str], unvalidated: list[str]) -> str:
     response = "Ваши провалидированные группы:\n"
     if validated:
-        response += "\n".join(f"   * {group}" for group in validated)
+        response += "\n".join(f"   - <b>{group}</b>" for group in validated)
     else:
-        response += "   Нет провалидированных групп"
+        response += "   🌝 Нет провалидированных групп"
 
     response += "\n\nВаши непровалидированные группы:\n"
     if unvalidated:
-        response += "\n".join(f"   * {group}" for group in unvalidated)
+        response += "\n".join(f"   - <b>{group}</b>" for group in unvalidated)
     else:
-        response += "   Нет непровалидированных групп"
+        response += "   🌚 Нет непровалидированных групп"
 
     return response
 
 
-def render_categories_buttons(categories: list[Category]) -> list[list[InlineKeyboardButton]]:
+def render_categories_buttons(categories: list[Category], prefix: str) -> list[list[InlineKeyboardButton]]:
     buttons = [
-        InlineKeyboardButton(text=c.name, callback_data=f"category:{c.id}") for c in categories
+        InlineKeyboardButton(text=c.name, callback_data=f"{prefix}:{c.id}") for c in categories
     ]
 
     return [buttons[i:i + 2] for i in range(0, len(buttons), 2)]

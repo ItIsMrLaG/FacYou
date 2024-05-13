@@ -1,8 +1,10 @@
+from typing import Any, Tuple
+
 from CFG.UICfg import COMMANDS as cmds
 from returns.result import Result, Success, Failure
 from utils import render_list_of_groups, render_categories_buttons, render_group
 
-from aiogram import types, F, Router, types
+from aiogram import F, Router, types
 from aiogram.filters import Command
 from aiogram.filters.state import State, StatesGroup
 from aiogram.fsm.context import FSMContext
@@ -62,7 +64,7 @@ async def process_privacy(callback_query: types.CallbackQuery, state: FSMContext
                                                parse_mode="HTML")
 
     cats = await db.get_categories()
-    keyboard = InlineKeyboardMarkup(inline_keyboard=render_categories_buttons(cats))
+    keyboard = InlineKeyboardMarkup(inline_keyboard=render_categories_buttons(cats, "category"))
 
     await callback_query.message.answer(text="Выберите категорию группы:", reply_markup=keyboard)
     await callback_query.answer()
@@ -127,28 +129,84 @@ async def process_link(message: types.Message, state: FSMContext, db: DatabaseMa
     await state.clear()
 
 
+# ============================ LIST EVENT ============================ #
+
+
+async def get_group_list(
+        message: types.Message,
+        db: DatabaseManager) -> bool:
+    res = await db.get_user_groups(message.from_user.id)
+    if isinstance(res, Failure):
+        await message.answer(res._inner_value)
+        return False
+    else:
+        [validated, unvalidated] = res.unwrap()
+        await message.answer(
+            f"{render_list_of_groups([g.name for g in validated], [g.name for g in unvalidated])}",
+            parse_mode="HTML"
+        )
+    return True
+
+
+@router.message(F.text, Command(cmds["my_groups_cmd"][0]))
+async def update_cmd(message: types.Message, state: FSMContext, db: DatabaseManager):
+    await get_group_list(message, db)
+
+
 # ============================ GROUP UPDATE EVENT ============================ #
 
 
 class Update(StatesGroup):
+    UPDATE_KEY = "CHANGE"
+    UPDATE = "ИЗМЕНИТЬ"
     choosing_group = State()
     choosing_parameter = State()
     update_title = State()
     update_privacy = State()
+    update_link = State()
+    update_category = State()
+
+
+async def update_group(message: types.Message, old_id: int, group: Group, db: DatabaseManager):
+    res_name = await db.update_group_title(old_id, group.name)
+    if isinstance(res_name, Failure):
+        await message.answer(res_name._inner_value)
+        return
+
+    res_privacy = await db.update_group_privacy(old_id, group.is_private)
+    if isinstance(res_privacy, Failure):
+        await message.answer(res_privacy._inner_value)
+        return
+
+    # TODO: Update Category and link
+    await message.answer("Группа {group.name} успешно обновлена")
 
 
 @router.message(F.text, Command(cmds["update_cmd"][0]))
 async def update_cmd(message: types.Message, state: FSMContext, db: DatabaseManager):
-    res = await db.get_user_groups(message.from_user.id)
-    if isinstance(res, Failure):
-        await message.answer(res._inner_value)
-        await state.clear()
-        return
-    else:
-        [validated, unvalidated] = res.unwrap()
-        await message.answer(f"{render_list_of_groups([g.name for g in validated], [g.name for g in unvalidated])}")
+    res = await get_group_list(message, db)
+    if res:
         await message.answer("Введите название группы для редактирования:")
-    await state.set_state(Update.choosing_group)
+        await state.set_state(Update.choosing_group)
+    else:
+        await state.clear()
+
+
+async def show_fields_keypad(message_run, text: str):
+    buttons = [
+        [
+            InlineKeyboardButton(text="Имя", callback_data="update:title"),
+            InlineKeyboardButton(text="Приватность", callback_data="update:privacy")
+        ],
+        [
+            InlineKeyboardButton(text="Ссылку", callback_data="update:link"),
+            InlineKeyboardButton(text="Категорию", callback_data="update:category")
+        ],
+        [InlineKeyboardButton(text=Update.UPDATE, callback_data=f"update:{Update.UPDATE_KEY}")]
+    ]
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message_run(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 @router.message(Update.choosing_group)
@@ -156,61 +214,167 @@ async def process_choosing_group(message: types.Message, state: FSMContext, db: 
     await state.update_data(group_name=message.text)
     group_name = (await state.get_data())["group_name"]
 
-    group_id = await db.get_group_id_by_name(group_name)
-    if isinstance(group_id, Failure):
-        await message.answer(text=group_id._inner_value)
+    group: Result[Group, str] = await db.get_group_by_name(group_name)
+    if isinstance(group, Failure):
+        await message.answer(text=group._inner_value)
         await state.clear()
         return
 
-    await state.update_data(group_id=group_id.unwrap())
+    # TODO group.unwrap().category fail with error !!!
 
-    title = InlineKeyboardButton(text="Название", callback_data="update:title")
-    privacy = InlineKeyboardButton(text="Приватность", callback_data="update:privacy")
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[title, privacy]])
-    await message.answer("Выберите параметр для редактирования", reply_markup=keyboard)
+    await state.update_data(
+        group_id=group.unwrap().id,
+        handlers=[],
+        group_info=group.unwrap()
+    )
+
+    await show_fields_keypad(
+        message.answer,
+        f"Выберите поля для редактирования ✏️\n"
+        f"<i>Чтоб прекратить редактирование, нажмите {Update.UPDATE}, не выбирая групп</i>"
+    )
     await state.set_state(Update.choosing_parameter)
 
 
-@router.callback_query(Update.choosing_parameter)
-async def process_choosing(callback_query: types.CallbackQuery, state: FSMContext):
-    type = callback_query.data.split("update:")[1]
-    if type == "title":
-        await callback_query.message.answer("Введите новое название")
-        await state.set_state(Update.update_title)
-    elif type == "privacy":
-        await state.set_state(Update.update_privacy)
+async def title_first_stage(message: types.Message, data: dict, db: DatabaseManager):
+    await message.answer(
+        f"Введите новое имя группы: \n<i>Старое имя: {data['group_info'].name}</i>",
+        parse_mode="HTML"
+    )
+
+
+async def privacy_first_stage(message: types.Message, data: dict, db: DatabaseManager):
+    buttons = [[
+        InlineKeyboardButton(text=Register.PRIVATE, callback_data="access_update:private"),
+        InlineKeyboardButton(text=Register.PUBLIC, callback_data="access_update:public"),
+    ]]
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer(
+        f"Выберите уровень приватности: \n<i>Старый уровень: {'🔒 Приватная' if data['group_info'].is_private else 'Публичная'}</i>",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+
+
+async def link_first_stage(message: types.Message, data: dict, db: DatabaseManager):
+    await message.answer(
+        f"Введите новую ссылку группы: \n<i>Старая ссылка: {data['group_info'].link}</i>",
+        parse_mode="HTML"
+    )
+
+
+async def category_first_stage(message: types.Message, data: dict, db: DatabaseManager):
+    cats = await db.get_categories()
+    keyboard = InlineKeyboardMarkup(inline_keyboard=render_categories_buttons(cats, "category1"))
+
+    await message.answer(
+        text=f"Выберите категорию группы: \n<i>(Категория до этого: {data['group_info'].category.name})</i>",
+        reply_markup=keyboard, parse_mode="HTML")
+
+
+def translate(tp_: str) -> tuple:
+    if tp_ == "title":
+        return "Имя", Update.update_title, title_first_stage
+    elif tp_ == "privacy":
+        return "Приватность", Update.update_privacy, privacy_first_stage
+    elif tp_ == "category":
+        return "Категорию", Update.update_category, category_first_stage
+    elif tp_ == "link":
+        return "Ссылку", Update.update_link, link_first_stage
+
+
+async def next_field_update(message: types.Message, data: dict, state: FSMContext, db: DatabaseManager):
+    if len(data["handlers"]) == 0:
+        await update_group(message, data["group_id"], data['group_info'], db)
+        await state.clear()
+    else:
+        _, st, user_event = translate(data["handlers"][0])
+        await user_event(message, data, db)
+        await state.set_state(st)
+        await state.update_data(handlers=data["handlers"][1:])
+
+
+@router.callback_query(F.data.startswith("update"), Update.choosing_parameter)
+async def process_choosing(callback_query: types.CallbackQuery, state: FSMContext, db: DatabaseManager):
+    tp = callback_query.data.split("update:")[1]
+    data: dict[str: Any] = await state.get_data()
+
+    if tp == Update.UPDATE_KEY:
+        if len(data["handlers"]) == 0:
+            await callback_query.message.edit_text("Редактирование прекращено")
+            await state.clear()
+        else:
+            fields = "<b>" + " - " + '\n - '.join([translate(el)[0] for el in data["handlers"]]) + "</b>"
+
+            await callback_query.message.edit_text(
+                "Выбранные для редактирования поля: \n" + fields,
+                parse_mode="HTML"
+            )
+            _, st, user_event = translate(data["handlers"][0])
+            await user_event(callback_query.message, data, db)
+            await state.set_state(st)
+            await state.update_data(handlers=data["handlers"][1:])
+
+    elif tp not in data["handlers"]:
+        data["handlers"].append(tp)
+        fields = "<i>" + " - " + '\n - '.join([translate(el)[0] for el in data["handlers"]]) + "</i>"
+        await show_fields_keypad(callback_query.message.edit_text, "Выберите поля для редактирования ✏️\n" + fields)
+
+    await callback_query.answer()
 
 
 @router.message(Update.update_title)
-async def update_title(message: types.Message, state: FSMContext, db: DatabaseManager):
-    await state.update_data(title=message.text)
+async def update_title_second_stage(message: types.Message, state: FSMContext, db: DatabaseManager):
+    data: dict[str: Any] = await state.get_data()
+    data['group_info'].name = message.text
 
-    data = await state.get_data()
-    title = data["title"]
-    group_id = data["group_id"]
+    await next_field_update(message, data, state, db)
 
-    res = await db.update_group_title(group_id, title)
-    if isinstance(res, Failure):
-        await message.answer(res._inner_value)
-        await state.clear()
+
+@router.callback_query(Update.update_privacy)
+async def update_privacy_second_stage(callback_query: types.CallbackQuery, state: FSMContext, db: DatabaseManager):
+    access = callback_query.data.split("access_update:")[1]
+    data: dict[str: Any] = await state.get_data()
+
+    if access == "private":
+        data['group_info'].is_private = True
+        await callback_query.message.edit_text(text=f"Вы выбрали тип группы: <b>{Register.PRIVATE}</b>",
+                                               parse_mode="HTML")
     else:
-        await message.answer("Группа успешно обновлена")
+        data['group_info'].is_private = False
+        await callback_query.message.edit_text(text=f"Вы выбрали тип группы: <b>{Register.PUBLIC}</b>",
+                                               parse_mode="HTML")
 
-    await state.clear()
+    await next_field_update(callback_query.message, data, state, db)
+    await callback_query.answer()
 
 
-@router.message(Update.update_privacy)
-async def update_privacy(message: types.Message, state: FSMContext, db: DatabaseManager):
-    data = await state.get_data()
-    group_id = data["group_id"]
+@router.callback_query(Update.update_category)
+async def update_category_next_stage(callback_query: types.CallbackQuery, state: FSMContext, db: DatabaseManager):
+    data: dict[str: Any] = await state.get_data()
+    cat_id = callback_query.data.split("category1:")[1]
+    category = await db.get_category(cat_id)
 
-    res = await db.update_group_privacy(group_id)
-    if isinstance(res, Failure):
-        await message.answer(res._inner_value)
+    if isinstance(category, Failure):
+        await callback_query.answer(category._inner_value)
         await state.clear()
-    else:
-        await message.answer("Группа успешно обновлена")
-    await state.clear()
+        return
+
+    cat_name = category.unwrap().name
+    data['group_info'].category = Category(id=int(cat_id), name=cat_name)
+    await callback_query.message.edit_text(f"Вы выбрали категорию: <b>{cat_name}</b>", parse_mode="HTML")
+
+    await next_field_update(callback_query.message, data, state, db)
+    await callback_query.answer()
+
+
+@router.message(Update.update_link)
+async def update_link_second_stage(message: types.Message, state: FSMContext, db: DatabaseManager):
+    data: dict[str: Any] = await state.get_data()
+    data['group_info'].link = message.text
+
+    await next_field_update(message, data, state, db)
 
 
 # ============================ DELETE EVENT ============================ #
@@ -230,7 +394,10 @@ async def delete_cmd(message: types.Message, db: DatabaseManager, state: FSMCont
         return
     else:
         [validated, unvalidated] = res.unwrap()
-        await message.answer(f"{render_list_of_groups([g.name for g in validated], [g.name for g in unvalidated])}")
+        await message.answer(
+            f"{render_list_of_groups([g.name for g in validated], [g.name for g in unvalidated])}",
+            parse_mode="HTML"
+        )
         await message.answer("Выберите группу для удаления:")
         await state.set_state(Delete.enter_name)
 
