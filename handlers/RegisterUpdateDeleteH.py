@@ -1,6 +1,6 @@
 from CFG.UICfg import COMMANDS as cmds
 from returns.result import Result, Success, Failure
-from utils import render_list_of_groups, render_categories_buttons
+from utils import render_list_of_groups, render_categories_buttons, render_group
 
 from aiogram import types, F, Router, types
 from aiogram.filters import Command
@@ -13,7 +13,12 @@ from Interface import Group, Category, User
 router = Router()
 
 
+# ============================ REGISTER EVENT ============================ #
+
+
 class Register(StatesGroup):
+    PRIVATE = "🔒 Приватная"
+    PUBLIC = "Публичная"
     choosing_name = State()
     choosing_category = State()
     choosing_privacy = State()
@@ -30,10 +35,17 @@ async def register_cmd(message: types.Message, state: FSMContext):
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
 
-    private = InlineKeyboardButton(text="🔒 Приватная", callback_data="access:private")
-    public = InlineKeyboardButton(text="Публичная", callback_data="access:public")
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[private, public]])
-    await message.answer(text="Выберите доступность группы:", reply_markup=keyboard)
+    buttons = [[
+        InlineKeyboardButton(text=Register.PRIVATE, callback_data="access:private"),
+        InlineKeyboardButton(text=Register.PUBLIC, callback_data="access:public"),
+    ]]
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer(
+        text="<b>Выберите доступность группы:</b> \n(<i>Уровень приватности контролируете Вы сами. В случае приватной группы, Ваша ссылка должна быть приватной. </i>)",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
     await state.set_state(Register.choosing_privacy)
 
 
@@ -42,13 +54,18 @@ async def process_privacy(callback_query: types.CallbackQuery, state: FSMContext
     access = callback_query.data.split("access:")[1]
     if access == "private":
         await state.update_data(is_private=True)
+        await callback_query.message.edit_text(text=f"Вы выбрали тип группы: <b>{Register.PRIVATE}</b>",
+                                               parse_mode="HTML")
     else:
         await state.update_data(is_private=False)
+        await callback_query.message.edit_text(text=f"Вы выбрали тип группы: <b>{Register.PUBLIC}</b>",
+                                               parse_mode="HTML")
 
     cats = await db.get_categories()
     keyboard = InlineKeyboardMarkup(inline_keyboard=render_categories_buttons(cats))
 
     await callback_query.message.answer(text="Выберите категорию группы:", reply_markup=keyboard)
+    await callback_query.answer()
     await state.set_state(Register.choosing_category)
 
 
@@ -65,13 +82,15 @@ async def process_categories(callback_query: types.CallbackQuery, state: FSMCont
     cat_name = category.unwrap().name
 
     if cat_name.find("Другое") != -1:
-        await state.update_data(category=Category(id=cat_id, name=cat_name))
-        await callback_query.answer(f"Похоже, для вашей группы еще нет подходящей категории")
+        await state.update_data(category=Category(id=int(cat_id), name=cat_name))
+        await callback_query.message.edit_text(f"Похоже, для вашей группы еще нет подходящей категории",
+                                               parse_mode="HTML")
     else:
-        await state.update_data(category=Category(id=cat_id, name=cat_name))
-        await callback_query.answer(f"Вы выбрали категорию: {cat_name}")
+        await state.update_data(category=Category(id=int(cat_id), name=cat_name))
+        await callback_query.message.edit_text(f"Вы выбрали категорию: <b>{cat_name}</b>", parse_mode="HTML")
 
-    await callback_query.message.answer("Введите ссылку на группу")
+    await callback_query.message.answer("Введите ссылку на группу:")
+    await callback_query.answer()
     await state.set_state(Register.choosing_link)
 
 
@@ -81,28 +100,34 @@ async def process_link(message: types.Message, state: FSMContext, db: DatabaseMa
 
     data = await state.get_data()
 
-    name = data["name"]
-    category = data["category"]
-    link = data["link"]
-    is_private = data["is_private"]
+    name: str = data["name"]
+    category: Category = data["category"]
+    link: str = data["link"]
+    is_private: bool = data["is_private"]
 
-    res = await db.add_unvalidated_group(
-        Group(
-            name=name,
-            link=link,
-            holder=User(id=message.from_user.id, nick=message.from_user.username),
-            is_private=is_private,
-            category=category
-        ))
+    new_group: Group = Group(
+        name=name,
+        link=link,
+        holder=User(id=message.from_user.id, nick=message.from_user.username),
+        is_private=is_private,
+        category=category
+    )
+
+    res = await db.add_unvalidated_group(new_group)
 
     if isinstance(res, Failure):
         await message.answer(res._inner_value)
         await state.clear()
         return
     else:
-        await message.answer("Группа отправлена на проверку администратору")
-
+        await message.answer(
+            f"Группа отправлена на проверку администратору\n\n" + render_group(new_group),
+            parse_mode="HTML"
+        )
     await state.clear()
+
+
+# ============================ GROUP UPDATE EVENT ============================ #
 
 
 class Update(StatesGroup):
@@ -186,6 +211,9 @@ async def update_privacy(message: types.Message, state: FSMContext, db: Database
     else:
         await message.answer("Группа успешно обновлена")
     await state.clear()
+
+
+# ============================ DELETE EVENT ============================ #
 
 
 class Delete(StatesGroup):

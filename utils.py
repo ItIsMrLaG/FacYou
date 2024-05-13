@@ -51,6 +51,14 @@ def render_group_links(groups: list[Group]) -> str:
     return "\n".join(render_group_link(g) for g in groups)
 
 
+def render_group(group: Group) -> str:
+    return (f"- Название: <b>{group.name}\n</b>"
+            f"- Ссылка: <b>{group.link}\n</b>"
+            f"- Категория: <b>{group.category.name}\n</b>"
+            f"- Тип: <b>{'🔒 Приватная' if group.is_private else 'Публичная'}\n</b>"
+            f"- Владелец: @{group.holder.nick}")
+
+
 def check_link(link: str) -> bool:
     for el in CFG.VerifiedLinks.GOOD_LINKS.values():
         print(link.find(el), el)

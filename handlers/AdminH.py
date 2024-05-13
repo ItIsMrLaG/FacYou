@@ -15,7 +15,7 @@ from database.db_requests import DatabaseManager
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from CFG.ConfigHandler import config as cfg
-from utils import render_group_link, render_template
+from utils import render_group_link, render_template, render_group
 
 
 class Admin(StatesGroup):
@@ -34,12 +34,9 @@ async def send_validate_item(message: Message, g: Group):
     ])
 
     await message.answer(
-        f"- Название: {g.name}\n"
-        f"- Ссылка: {g.link}\n"
-        f"- Категория: {g.category.name}\n"
-        f"- Тип: {'🔒 Приватная' if g.is_private else 'Публичная'}\n"
-        f"- Владелец: @{g.holder.nick}",
-        reply_markup=keyboard
+        render_group(g),
+        reply_markup=keyboard,
+        parse_mode="HTML"
     )
 
 
@@ -96,7 +93,8 @@ async def handle_validation(callback_query: types.CallbackQuery, state: FSMConte
             result: Result[bool, str] = await db.update_group_set_validate_status(group_id.unwrap())
             if isinstance(result, Failure):
                 await callback_query.message.edit_text(
-                    text=f"‼️Не удалось добавить группу {render_group_link(data['group_on_validate'])}."
+                    text=f"‼️Не удалось добавить группу {render_group_link(data['group_on_validate'])}.",
+                    parse_mode="HTML"
                 )
                 # TODO: handle the case result.unwrap()
 
