@@ -1,14 +1,18 @@
 from sqlalchemy import Column, Integer, String, Boolean, Table, ForeignKey, select
 from sqlalchemy.orm import relationship, declarative_base
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
+
+import CFG.DataBaseCFG
 
 Base = declarative_base()
+
 
 class Category(Base):
     __tablename__ = 'category'
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String)
     groups = relationship('Group', back_populates='category')
+
 
 class Group(Base):
     __tablename__ = 'group'
@@ -29,9 +33,8 @@ class User(Base):
     nick = Column(String)
     groups = relationship('Group', order_by=Group.id, back_populates='holder')
 
-categories = ["⚽️ Спорт", "📕 Учеба", "🎭 Клубы", "🚨 Объявления", "➖ Другое"]
 
-async def async_main(engine : AsyncEngine):
+async def async_main(engine: AsyncEngine):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -39,10 +42,10 @@ async def async_main(engine : AsyncEngine):
 
     async with session() as session:
         async with session.begin():
-            for cat in categories:
-                exists = await session.execute(select(Category).filter_by(name = cat))
+            for cat in CFG.DataBaseCFG.CATEGORIES:
+                exists = await session.execute(select(Category).filter_by(name=cat))
                 if not exists.scalars().first():
-                    new_cat = Category(name = cat)
+                    new_cat = Category(name=cat)
                     session.add(new_cat)
-            
+
             await session.commit()

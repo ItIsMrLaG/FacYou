@@ -1,6 +1,8 @@
+from aiogram.fsm.context import FSMContext
+
 from CFG.ConfigHandler import config as cfg
-from CFG.UICfg import commands as cmds
-from CFG.SupportCFG import contacts
+from CFG.UICfg import COMMANDS as cmds
+from CFG.SupportCFG import CONTACTS
 from utils import render_template
 
 from aiogram import types, F, Router
@@ -26,8 +28,8 @@ async def help_cmd(message: types.Message):
 async def support_cmd(message: types.Message):
     path = cfg.static_folder.joinpath("support.template")
     fields: dict = {}
-    for i in range(len(contacts)):
-        fields["id"+str(i)] = contacts[i]
+    for i in range(len(CONTACTS)):
+        fields["id"+str(i)] = CONTACTS[i]
     rendered_text: str = render_template(path, fields)
 
     await message.answer(rendered_text, parse_mode="HTML")
@@ -48,5 +50,6 @@ async def start_cmd(message: Message):
 
 
 @router.message(F.text)
-async def message_with_text(message: Message):
+async def message_with_text(message: Message, state: FSMContext):
     await message.answer(f"Я не знаю, что с этим делать, попробуйте воспользоваться командой /{cmds['help_cmd'][0]}.")
+    await state.clear()

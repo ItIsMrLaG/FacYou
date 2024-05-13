@@ -1,4 +1,4 @@
-commands = {
+COMMANDS = {
     "search_cmd": ("fac", "Найти групп/беседу"),
     "register_cmd": ("register", "Зарегистрировать группу/беседу"),
     "update_cmd": ("update", "Редактировать свою группу/беседу"),
@@ -7,6 +7,9 @@ commands = {
     "start_cmd": ("start", "Начать?"),
     "support_cmd": ("contacts", "Связь с поддержкой"),
     "admin_cmd": ("admin", "Гайд для админа"),
-    "validate_cmd": ("validate", "Провадилировать группы"),
+}
+
+ADMIN_COMMANDS = {
+    "validate_cmd": ("validate", "Валидация групп"),
 }
 

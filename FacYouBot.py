@@ -3,7 +3,7 @@ import logging
 import sys
 
 from CFG.ConfigHandler import config as cfg
-from CFG.UICfg import commands as cmds
+from CFG.UICfg import COMMANDS as cmds
 from handlers import StaticH, AdminH, RegisterUpdateDeleteH, SearchH
 
 from aiogram import Bot, Dispatcher, types

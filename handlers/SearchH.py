@@ -2,7 +2,7 @@ from typing import Any
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from CFG.UICfg import commands as cmds
+from CFG.UICfg import COMMANDS as cmds
 
 from aiogram import types, F, Router
 from aiogram.filters import Command
@@ -13,13 +13,14 @@ from Interface import Group, Category
 from database.db_requests import DatabaseManager
 from utils import render_categories_buttons, render_group_links, render_categories_list
 
-router = Router()
-
 
 class Search(StatesGroup):
     SUBMIT_KEY = "SUBMIT"
     SUBMIT_NAME = "ВЫБРАТЬ"
     choosing = State()
+
+
+router = Router()
 
 
 @router.message(F.text, Command(cmds["search_cmd"][0]))
