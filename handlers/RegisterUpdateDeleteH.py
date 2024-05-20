@@ -179,7 +179,7 @@ async def update_group(message: types.Message, old_id: int, group: Group, db: Da
         return
 
     # TODO: Update Category and link
-    await message.answer("Группа {group.name} успешно обновлена")
+    await message.answer(f"Группа {group.name} успешно обновлена")
 
 
 @router.message(F.text, Command(cmds["update_cmd"][0]))
@@ -219,8 +219,6 @@ async def process_choosing_group(message: types.Message, state: FSMContext, db: 
         await message.answer(text=group._inner_value)
         await state.clear()
         return
-
-    # TODO group.unwrap().category fail with error !!!
 
     await state.update_data(
         group_id=group.unwrap().id,

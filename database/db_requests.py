@@ -1,6 +1,7 @@
 from returns.result import Result, Success, Failure
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 from .map_extensions import *
 from CFG.ConfigHandler import config as cfg
 
@@ -94,15 +95,21 @@ class DatabaseManager:
 
         return groups_view
 
-    async def get_group_by_name(self, name) -> Result[Group, str]:
+    async def get_group_by_name(self, name) -> Result[GroupView, str]:
         session = self.session
-        result = await session.execute(select(Group).filter_by(name=name))
+        result = await session.execute(
+            select(Group)
+            .options(joinedload(Group.category))
+            .filter_by(name=name))
         group = result.scalars().first()
 
         if not group:
             return Failure("Такой группы не существует")
-
-        return Success(group)
+        
+        cat = await self.get_category(group.category_id)
+        user = await self.get_user(group.holder_id)
+        
+        return Success(group_map(group, cat.unwrap(), user))
 
     async def get_group_id_by_name(self, name) -> Result[int, str]:
         group = await self.get_group_by_name(name)

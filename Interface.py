@@ -19,6 +19,7 @@ class User:
 
 @dataclass
 class Group:
+    id: int
     name: str
     link: str
     is_private: bool

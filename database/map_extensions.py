@@ -11,6 +11,7 @@ def category_map(cat: Category):
 
 def group_map(gr: Group, cat: CategoryView, holder: UserView):
     return GroupView(
+        id=gr.id,
         name=gr.name,
         link=gr.link,
         is_private=gr.is_private,
