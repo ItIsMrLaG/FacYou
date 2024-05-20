@@ -168,17 +168,11 @@ class Update(StatesGroup):
 
 
 async def update_group(message: types.Message, old_id: int, group: Group, db: DatabaseManager):
-    res_name = await db.update_group_title(old_id, group.name)
-    if isinstance(res_name, Failure):
-        await message.answer(res_name._inner_value)
+    res = await db.update_group(group)
+    if isinstance(res, Failure):
+        await message.answer(text=group._inner_value)
         return
 
-    res_privacy = await db.update_group_privacy(old_id, group.is_private)
-    if isinstance(res_privacy, Failure):
-        await message.answer(res_privacy._inner_value)
-        return
-
-    # TODO: Update Category and link
     await message.answer(f"Группа {group.name} успешно обновлена")
 
 

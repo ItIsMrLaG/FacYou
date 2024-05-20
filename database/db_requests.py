@@ -169,6 +169,22 @@ class DatabaseManager:
         await session.execute(update(Group).where(Group.id == group_id).values(is_validated=True))
         await session.commit()
         return Success(True)
+    
+    async def update_group(self, group: GroupView) -> Result[bool, str]:
+        session = self.session
+        res = await session.execute(select(Group).filter_by(id=group.id))
+        gr = res.scalars().first()
+        if not gr:
+            return Failure("Такой группы не существует.")
+        
+        gr.name = group.name
+        gr.category_id = group.category.id
+        gr.holder_id = group.holder.id
+        gr.link = gr.link
+        gr.is_private = group.is_private
+        gr.is_validated = False
+
+        await session.commit()
 
     async def update_group_title(self, group_id: int, title: str) -> Result[bool, str]:
         session = self.session
