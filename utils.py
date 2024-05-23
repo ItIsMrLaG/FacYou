@@ -1,4 +1,7 @@
+import os
 from pathlib import Path
+
+from dotenv import load_dotenv
 from jinja2 import Template
 
 import CFG.VerifiedLinks
@@ -65,3 +68,9 @@ def check_link(link: str) -> bool:
         if link.find(el) == 0:
             return True
     return False
+
+
+def load_env():
+    dotenv_path = os.path.join(os.path.dirname(__file__), '.env')
+    if os.path.exists(dotenv_path):
+        load_dotenv(dotenv_path)
