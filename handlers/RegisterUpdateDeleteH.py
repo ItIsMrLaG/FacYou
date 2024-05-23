@@ -112,7 +112,8 @@ async def process_link(message: types.Message, state: FSMContext, db: DatabaseMa
         link=link,
         holder=User(id=message.from_user.id, nick=message.from_user.username),
         is_private=is_private,
-        category=category
+        category=category,
+        id=-1
     )
 
     res = await db.add_unvalidated_group(new_group)
@@ -173,7 +174,7 @@ async def update_group(message: types.Message, old_id: int, group: Group, db: Da
         await message.answer(text=group._inner_value)
         return
 
-    await message.answer(f"Группа {group.name} успешно обновлена")
+    await message.answer(f"Группа {group.name} успешно обновлена и отправлена на проверку администратору")
 
 
 @router.message(F.text, Command(cmds["update_cmd"][0]))
@@ -223,7 +224,8 @@ async def process_choosing_group(message: types.Message, state: FSMContext, db: 
     await show_fields_keypad(
         message.answer,
         f"Выберите поля для редактирования ✏️\n"
-        f"<i>Чтоб прекратить редактирование, нажмите {Update.UPDATE}, не выбирая групп</i>"
+        f"<i> - Чтобы прекратить редактирование, нажмите {Update.UPDATE}, не выбирая групп.</i>\n"
+        f"<i> - После обновления группа будет отправлена на повторную валидацию </i>"
     )
     await state.set_state(Update.choosing_parameter)
 
