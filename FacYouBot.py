@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import os
 
 from CFG.ConfigHandler import config as cfg
 from CFG.UICfg import COMMANDS as cmds
@@ -10,6 +11,7 @@ from aiogram import Bot, Dispatcher, types
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from db_middleware import DatabaseMiddleware
 from database.models import async_main
+from utils import load_env
 
 
 async def main():
