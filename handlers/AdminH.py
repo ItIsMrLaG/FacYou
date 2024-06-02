@@ -28,8 +28,8 @@ router = Router()
 async def send_validate_item(message: Message, g: Group):
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="✅ Принять", callback_data=f"validate:accept:{g.name}"),
-            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"validate:reject:{g.name}")
+            InlineKeyboardButton(text="✅ Принять", callback_data=f"validate:accept"),
+            InlineKeyboardButton(text="❌ Отклонить", callback_data=f"validate:reject")
         ]
     ])
 
@@ -84,26 +84,23 @@ async def handle_validation(callback_query: types.CallbackQuery, state: FSMConte
     q_data: str = callback_query.data.split("validate:")[1]
     ans: str = q_data.split(":")[0]
     data: dict[str: Any] = await state.get_data()
+    group_on_validate: Group = data["group_on_validate"]
 
     if ans == "accept":
-        group_name: str = q_data.split(":")[1]
-        group_id = await db.get_group_id_by_name(group_name)
-        if isinstance(group_id, Success):
-
-            result: Result[bool, str] = await db.update_group_set_validate_status(group_id.unwrap())
-            if isinstance(result, Failure):
-                await callback_query.message.edit_text(
-                    text=f"‼️Не удалось добавить группу {render_group_link(data['group_on_validate'])}.",
-                    parse_mode="HTML"
-                )
-                # TODO: handle the case result.unwrap()
-
+        result: Result[bool, str] = await db.update_group_set_validate_status(str(group_on_validate.id))
+        if isinstance(result, Failure):
             await callback_query.message.edit_text(
-                text=f"✅ Группа {render_group_link(data['group_on_validate'])} добавлена. (автор запроса: @{data['group_on_validate'].holder.nick})",
-                parse_mode="HTML",
+                text=f"‼️Не удалось добавить группу {render_group_link(data['group_on_validate'])}.",
+                parse_mode="HTML"
             )
+            # TODO: handle the case result.unwrap()
+
+        await callback_query.message.edit_text(
+            text=f"✅ Группа {render_group_link(data['group_on_validate'])} добавлена. (автор запроса: @{data['group_on_validate'].holder.nick})",
+            parse_mode="HTML",
+        )
     else:
-        group_name = q_data.split(":")[1]
+        group_name = group_on_validate.name
         res = await db.delete_group(group_name, callback_query.from_user.id)
         await callback_query.message.edit_text(
             "❌" + res._inner_value + f"\n(группа: {render_group_link(data['group_on_validate'])}, автор запроса: @{data['group_on_validate'].holder.nick})",
